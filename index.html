@@ -37,6 +37,7 @@ button.amb{background:var(--amb);color:#000}button.red{background:var(--red);col
 .dot.on{background:var(--ok);box-shadow:0 0 0 4px #2ecc7130}.dot.warn{background:var(--amb)}.dot.err{background:var(--red)}
 .board{background:#000;border:2px solid var(--line);border-radius:20px;padding:16px 14px 14px;text-align:center;margin-top:10px}
 #pk{font-weight:800;font-size:clamp(64px,22vw,130px);line-height:1;color:var(--amb);font-variant-numeric:tabular-nums;letter-spacing:-2px;white-space:nowrap;margin:4px 0}
+#pk.est{color:#c9a24a}
 #pkInfo{font-size:15px;color:var(--mute)}
 .track{height:8px;border-radius:4px;background:var(--line);position:relative;margin:14px 6px 4px}
 .track i{position:absolute;top:-6px;width:20px;height:20px;border-radius:50%;background:var(--amb);border:3px solid #000;transform:translateX(-50%);left:0;transition:left .5s}
@@ -119,6 +120,7 @@ details{margin-top:24px;color:var(--mute);font-size:15px}summary{min-height:40px
   <div class="msg" id="msg"></div>
   <button id="anoBtn">⚠ ANOMALIE</button>
   <div class="list" id="list"></div>
+  <button class="ghost" id="recBtn" style="margin-top:10px">⌖ Recaler sur une borne</button>
   <div class="row"><button class="ghost" id="edit">Modifier la liste</button><button id="endBtn">Terminer la tournée</button></div>
 </section>
 
@@ -147,6 +149,18 @@ details{margin-top:24px;color:var(--mute);font-size:15px}summary{min-height:40px
     <input id="pkEdit" inputmode="decimal" autocomplete="off">
     <div class="row"><button class="ghost" id="cancel">Annuler</button><button class="amb" id="save">Enregistrer</button></div>
     <div class="row" id="delRow" style="display:none"><button class="red" id="del">Supprimer cette anomalie</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="rsheet" role="dialog" aria-modal="true" aria-labelledby="recT">
+  <div class="card">
+    <h2 id="recT">Recaler sur une borne</h2>
+    <p class="sub" style="margin:0">Au passage d'une borne ou d'un repère, tapez son PK exact. L'app affiche actuellement <b id="recNow" style="color:var(--amb)"></b>.</p>
+    <label for="recPk">PK réel de la borne</label>
+    <input id="recPk" inputmode="decimal" autocomplete="off">
+    <p id="recMsg" style="color:#ffb8b1;font-size:15px;margin:8px 0 0"></p>
+    <div class="row"><button class="ghost" id="recCancel">Annuler</button><button class="amb" id="recOk">Recaler</button></div>
+    <div class="row"><button class="ghost" id="recDel" style="display:none">Retirer le recalage</button></div>
   </div>
 </div>
 
@@ -221,35 +235,69 @@ function startGPS(){
   watchId=navigator.geolocation.watchPosition(p=>{
     const c=p.coords,r=locate(c.latitude,c.longitude);
     let speed=c.speed!=null&&c.speed>=0?c.speed*3.6:null;
-    if(fix&&speed==null){const dt=(p.timestamp-fix.ts)/1000;if(dt>0)speed=Math.abs(r.pk-fix.pk)*3600/dt}
+    if(fix&&speed==null){const dt=(p.timestamp-fix.ts)/1000;if(dt>0)speed=Math.abs(r.pk-fix.raw)*3600/dt}
     if(speed!=null&&speed>250)speed=null; // saut de position GPS : vitesse ignorée
     if(lastPk!=null&&Math.abs(r.pk-lastPk)>0.003){dir.push(Math.sign(r.pk-lastPk));if(dir.length>6)dir.shift()}
     lastPk=r.pk;
-    fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy,speed,ts:p.timestamp,pk:r.pk,d:r.d};
-    if(T&&!T.end){if(T.pkStart==null)T.pkStart=r.pk;T.pkEnd=r.pk;save()}
+    fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy,speed,ts:p.timestamp,raw:r.pk,d:r.d};
+    if(T&&!T.end){const v=r.pk+off();if(T.pkStart==null)T.pkStart=v;T.pkEnd=v;save()}
     paint();
   },err=>{
     gpsState(err.code===1?'GPS refusé':'Signal GPS faible','err');
     msg(err.code===1?'Autorisez la localisation : Réglages › Safari › Position › Autoriser, puis rechargez la page.':'');
   },{enableHighAccuracy:true,maximumAge:0,timeout:15000});
 }
+const off=()=>T&&T.off||0;
+const dirSign=()=>{if(dir.length<2)return 0;const t=dir.reduce((x,y)=>x+y,0);return t>0?1:t<0?-1:0};
+// PK courant : GPS + recalage ; si le GPS décroche, on avance selon la dernière vitesse connue
+function cur(){
+  if(!fix)return null;
+  const age=(Date.now()-fix.ts)/1000;let pk=fix.raw,est=false;
+  if(age>4){est=true;const sg=dirSign();if(fix.speed!=null&&fix.speed>3&&sg&&age<900)pk+=sg*fix.speed*age/3600}
+  return {pk:pk+off(),gps:pk,est,age};
+}
 function paint(){
-  if(!fix)return;
-  $('pk').textContent=fmtPk(fix.pk);
-  const s=dir.reduce((a,b)=>a+b,0);
-  $('pkInfo').textContent=(dir.length<3?'':s>0?'PK croissants · ':s<0?'PK décroissants · ':'')+(fix.d>60?'à '+Math.round(fix.d)+' m de la voie':'sur la voie');
+  const c=cur();if(!c)return;
+  $('pk').textContent=(c.est?'≈':'')+fmtPk(c.pk);
+  $('pk').classList.toggle('est',c.est);
+  const sg=dirSign(),parts=[];
+  if(c.est)parts.push('PK estimé · GPS perdu depuis '+Math.round(c.age)+' s');
+  else{if(dir.length>=3&&sg)parts.push(sg>0?'PK croissants':'PK décroissants');parts.push(fix.d>60?'à '+Math.round(fix.d)+' m de la voie':'sur la voie')}
+  if(off())parts.push('recalé '+(off()>0?'+':'−')+Math.round(Math.abs(off())*1000)+' m');
+  $('pkInfo').textContent=parts.join(' · ');
   $('spd').textContent=fix.speed!=null?Math.round(fix.speed):'—';
-  $('acc').textContent='±'+Math.round(fix.acc)+' m';
+  $('acc').textContent=c.est?'—':'±'+Math.round(fix.acc)+' m';
   const a=ROUTE[0][0],b=ROUTE[ROUTE.length-1][0];
-  $('cur').style.left=Math.max(0,Math.min(100,(fix.pk-a)/(b-a)*100))+'%';
-  msg(fix.d>300?'Vous êtes loin de la ligne ('+Math.round(fix.d)+' m) : le PK affiché n\'est pas fiable.':'');
+  $('cur').style.left=Math.max(0,Math.min(100,(c.pk-a)/(b-a)*100))+'%';
+  msg(!c.est&&fix.d>300?'Vous êtes loin de la ligne ('+Math.round(fix.d)+' m) : le PK affiché n\'est pas fiable.':'');
 }
 setInterval(()=>{
   if(!fix||!$('s2').classList.contains('on'))return;
   const age=(Date.now()-fix.ts)/1000;
-  if(age>10)gpsState('Signal perdu depuis '+Math.round(age)+' s','warn');
+  if(age>4){gpsState('Signal perdu · PK estimé','warn');paint()}
   else gpsState('GPS actif','on');
 },1000);
+
+/* ---------- recalage sur une borne ---------- */
+$('recBtn').onclick=()=>{
+  const c=cur();
+  if(!c){msg('Attendez le premier signal GPS avant de recaler.');return}
+  $('recNow').textContent=fmtPk(c.pk);
+  $('recPk').value=fmtPk(Math.round(c.pk*10)/10); // proposé : hectomètre le plus proche
+  $('recMsg').textContent='';delete $('recOk').dataset.sure;
+  $('recDel').style.display=off()?'block':'none';
+  $('rsheet').classList.add('on');
+};
+$('recCancel').onclick=()=>$('rsheet').classList.remove('on');
+$('recOk').onclick=()=>{
+  const v=parsePk($('recPk').value),c=cur();
+  if(v==null||!c){$('recMsg').textContent='Tapez le PK de la borne, par exemple 12+300.';return}
+  const n=v-c.gps;
+  if(Math.abs(n-off())>0.3&&!$('recOk').dataset.sure){$('recOk').dataset.sure=1;$('recMsg').textContent='Écart important ('+Math.round(Math.abs(n-off())*1000)+' m). Touchez encore « Recaler » pour confirmer.';return}
+  T.off=n;(T.recal=T.recal||[]).push({ts:Date.now(),pk:v,ecart:Math.round(n*1000)});save();
+  $('rsheet').classList.remove('on');paint();
+};
+$('recDel').onclick=()=>{T.off=0;save();$('rsheet').classList.remove('on');paint()};
 async function keepAwake(){try{wake=await navigator.wakeLock.request('screen')}catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&T&&!T.end)keepAwake()});
 
@@ -264,14 +312,15 @@ $('type').onchange=syncChips;
 $('anoBtn').onclick=()=>{
   // on fige tout de suite le PK et l'heure du clic
   const now=Date.now();
-  pending={ts:now,pk:fix?fix.pk:null,lat:fix?fix.lat:null,lon:fix?fix.lon:null,acc:fix?fix.acc:null,gpsAge:fix?Math.round((now-fix.ts)/1000):null,type:'',det:''};
+  const c=cur();
+  pending={ts:now,pk:c?c.pk:null,est:c?c.est:false,lat:fix?fix.lat:null,lon:fix?fix.lon:null,acc:fix?fix.acc:null,gpsAge:fix?Math.round((now-fix.ts)/1000):null,type:'',det:''};
   if(navigator.vibrate)navigator.vibrate(60);
   openSheet(pending,-1);
 };
 function openSheet(a,idx){
   editIdx=idx;
-  $('capPk').textContent=fmtPk(a.pk);
-  $('capT').textContent=hms(new Date(a.ts))+(a.pk==null?' · sans GPS':a.gpsAge>10?' · GPS de '+a.gpsAge+' s':'');
+  $('capPk').textContent=fpk(a);
+  $('capT').textContent=hms(new Date(a.ts))+(a.pk==null?' · sans GPS':a.est?' · PK estimé (GPS perdu)':'');
   $('type').value=a.type;$('det').value=a.det;$('pkEdit').value=a.pk==null?'':fmtPk(a.pk);
   syncChips();$('delRow').style.display=idx>=0?'flex':'none';
   $('sheet').classList.add('on');
@@ -281,17 +330,18 @@ $('save').onclick=()=>{
   const a=editIdx>=0?T.ano[editIdx]:pending;
   a.type=$('type').value;a.det=$('det').value.trim();
   if(!a.type&&!a.det){$('det').focus();$('det').placeholder='Choisissez un défaut ou écrivez-le';return}
-  const v=parsePk($('pkEdit').value);if(v!=null)a.pk=v;
+  const v=parsePk($('pkEdit').value);if(v!=null&&fmtPk(v)!==fmtPk(a.pk)){a.pk=v;a.est=false}
   if(editIdx<0)T.ano.push(a);
   save();$('sheet').classList.remove('on');pending=null;render();
 };
 $('del').onclick=()=>{T.ano.splice(editIdx,1);save();$('sheet').classList.remove('on');render()};
 $('edit').onclick=()=>{editing=!editing;$('edit').textContent=editing?'Fin des modifications':'Modifier la liste';render()};
 $('list').onclick=e=>{const b=e.target.closest('button[data-i]');if(b)openSheet(T.ano[+b.dataset.i],+b.dataset.i)};
+const fpk=a=>(a.est?'≈':'')+fmtPk(a.pk);
 const label=a=>[a.type,a.det].filter(Boolean).join(' — ');
 function render(){
   $('cnt').textContent=T.ano.length;
-  $('list').innerHTML=T.ano.length?T.ano.map((a,i)=>'<div class="item"><span class="n">'+(i+1)+'</span><span class="p">'+fmtPk(a.pk)+'</span><span class="t">'+hm(new Date(a.ts))+'</span>'+(editing?'<button style="display:block" data-i="'+i+'">Modifier</button>':'')+'<span class="d">'+esc(a.type||'')+(a.det?' <small>'+esc(a.det)+'</small>':'')+'</span></div>').reverse().join(''):'<div class="empty">Aucune anomalie notée. Touchez le bouton rouge au moment du défaut.</div>';
+  $('list').innerHTML=T.ano.length?T.ano.map((a,i)=>'<div class="item"><span class="n">'+(i+1)+'</span><span class="p">'+fpk(a)+'</span><span class="t">'+hm(new Date(a.ts))+'</span>'+(editing?'<button style="display:block" data-i="'+i+'">Modifier</button>':'')+'<span class="d">'+esc(a.type||'')+(a.det?' <small>'+esc(a.det)+'</small>':'')+'</span></div>').reverse().join(''):'<div class="empty">Aucune anomalie notée. Touchez le bouton rouge au moment du défaut.</div>';
 }
 
 /* ---------- fin de tournée ---------- */
@@ -306,7 +356,7 @@ $('endBtn').onclick=()=>{
 function rows(){
   const i=T.info,d=new Date(T.start),f=new Date(T.end||Date.now());
   const dur=Math.round(((T.end||Date.now())-T.start)/60000);
-  return [['Ligne','Benguérir – Safi'],['Date',i.date?i.date.split('-').reverse().join('/'):d.toLocaleDateString('fr-FR')],['Agent',i.agent],['N° de train',i.train],['N° wagon / cabine',i.wagon],['Voie',i.voie],['Sens',i.sens],['Heure de départ',i.hdep],['Heure de fin',hm(f)],['Durée',Math.floor(dur/60)+' h '+pad(dur%60)],['PK début → fin',T.pkStart!=null?fmtPk(T.pkStart)+' → '+fmtPk(T.pkEnd):'—'],['Nombre d\'anomalies',String(T.ano.length)],['Remarque',i.obs0]].filter(r=>r[1]);
+  return [['Ligne','Benguérir – Safi'],['Date',i.date?i.date.split('-').reverse().join('/'):d.toLocaleDateString('fr-FR')],['Agent',i.agent],['N° de train',i.train],['N° wagon / cabine',i.wagon],['Voie',i.voie],['Sens',i.sens],['Heure de départ',i.hdep],['Heure de fin',hm(f)],['Durée',Math.floor(dur/60)+' h '+pad(dur%60)],['PK début → fin',T.pkStart!=null?fmtPk(T.pkStart)+' → '+fmtPk(T.pkEnd):'—'],['Nombre d\'anomalies',String(T.ano.length)],['Recalages',T.recal&&T.recal.length?T.recal.length+' (dernier : PK '+fmtPk(T.recal[T.recal.length-1].pk)+', écart '+T.recal[T.recal.length-1].ecart+' m)':''],['Remarque',i.obs0]].filter(r=>r[1]);
 }
 function counts(){const c={};for(const a of T.ano){const k=a.type||'Autre';c[k]=(c[k]||0)+1}return Object.entries(c)}
 function sorted(){return T.ano.map((a,i)=>({...a,n:i+1}))}
@@ -328,7 +378,8 @@ function toTxt(){
   for(const r of rows())L.push((r[0]+' ').padEnd(22,'.')+' '+r[1]);
   L.push('','ANOMALIES','---------');
   if(!T.ano.length)L.push('Aucune anomalie relevée.');
-  for(const a of sorted())L.push(String(a.n).padStart(3)+'. PK '+fmtPk(a.pk)+'  '+hms(new Date(a.ts))+'  '+label(a)+(a.lat!=null?'  ('+a.lat.toFixed(6)+', '+a.lon.toFixed(6)+')':''));
+  for(const a of sorted())L.push(String(a.n).padStart(3)+'. PK '+fpk(a)+'  '+hms(new Date(a.ts))+'  '+label(a)+(a.lat!=null?'  ('+a.lat.toFixed(6)+', '+a.lon.toFixed(6)+')':''));
+  if(T.ano.some(a=>a.est))L.push('','≈ : PK estimé, le GPS était perdu à ce moment.');
   if(T.ano.length){L.push('','RÉCAPITULATIF');for(const[k,v]of counts())L.push('  '+k+' : '+v)}
   L.push('','Signature :','');
   return L.join('\r\n');
@@ -339,7 +390,7 @@ function toXml(){
   let o='<?xml version="1.0" encoding="UTF-8"?>\n<compteRendu>\n  <tournee>\n';
   for(const r of rows())o+='    <info nom="'+x(r[0])+'">'+x(r[1])+'</info>\n';
   o+='  </tournee>\n  <anomalies>\n';
-  for(const a of sorted())o+='    <anomalie n="'+a.n+'" pk="'+fmtPk(a.pk)+'" heure="'+hms(new Date(a.ts))+'"'+(a.lat!=null?' lat="'+a.lat.toFixed(6)+'" lon="'+a.lon.toFixed(6)+'"':'')+'>\n      <defaut>'+x(a.type)+'</defaut>\n      <precision>'+x(a.det)+'</precision>\n    </anomalie>\n';
+  for(const a of sorted())o+='    <anomalie n="'+a.n+'" pk="'+fmtPk(a.pk)+'"'+(a.est?' estime="oui"':'')+' heure="'+hms(new Date(a.ts))+'"'+(a.lat!=null?' lat="'+a.lat.toFixed(6)+'" lon="'+a.lon.toFixed(6)+'"':'')+'>\n      <defaut>'+x(a.type)+'</defaut>\n      <precision>'+x(a.det)+'</precision>\n    </anomalie>\n';
   return o+'  </anomalies>\n</compteRendu>\n';
 }
 /* --- word (.docx) écrit à la main, sans connexion --- */
@@ -352,7 +403,8 @@ function toDocx(){
   let b=p('COMPTE RENDU DE TOURNÉE',{b:1,s:32,center:1,after:60})+p('Ligne Benguérir – Safi',{s:22,center:1,c:'555555',after:240});
   b+=tbl([3200,6200],rows().filter(r=>r[0]!=='Ligne'));
   b+=p('',{after:120})+p('Anomalies relevées',{b:1,s:26,after:100});
-  b+=T.ano.length?tbl([500,1200,1100,4400,2200],sorted().map(a=>[String(a.n),fmtPk(a.pk),hms(new Date(a.ts)),label(a),a.lat!=null?a.lat.toFixed(5)+', '+a.lon.toFixed(5):'—']),['N°','PK','Heure','Défaut','GPS']):p('Aucune anomalie relevée.');
+  b+=T.ano.length?tbl([500,1200,1100,4400,2200],sorted().map(a=>[String(a.n),fpk(a),hms(new Date(a.ts)),label(a),a.lat!=null?a.lat.toFixed(5)+', '+a.lon.toFixed(5):'—']),['N°','PK','Heure','Défaut','GPS']):p('Aucune anomalie relevée.');
+  if(T.ano.some(a=>a.est))b+=p('≈ : PK estimé, le GPS était perdu à ce moment.',{s:18,c:'555555'});
   if(T.ano.length){b+=p('',{after:120})+p('Récapitulatif',{b:1,s:26,after:100})+tbl([6000,3400],counts().map(([k,v])=>[k,String(v)]),['Défaut','Nombre'])}
   b+=p('',{after:360})+p('Signature de l\'agent :',{b:1});
   const doc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+b+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>';
