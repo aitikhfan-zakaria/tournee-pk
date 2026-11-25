@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tournée PK">
+<title>Tournée PK</title>
+<style>
+/* VOICE: outil de cabine, sobre et lisible en roulant
+   IDEA: afficheur de PK d'un engin de mesure
+   PICTURE: le PK géant en ambre sur fond noir
+   COLOUR/TYPE: noir, ambre signal, rouge anomalie ; police système, chiffres tabulaires
+   LAYOUT: une colonne, gros boutons pour le pouce */
+:root{--bg:#0b0f14;--panel:#151b23;--line:#28313d;--ink:#eef2f6;--mute:#8c97a6;--amb:#ffb400;--red:#ff4b3e;--ok:#2ecc71}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,sans-serif}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+main{max-width:680px;margin:0 auto;padding:14px 14px 40px}
+.screen{display:none}.screen.on{display:block}
+h1{font-size:24px;margin:8px 0 4px}h2{font-size:18px;margin:0 0 10px}
+.sub{color:var(--mute);font-size:15px;margin:0 0 16px}
+label{display:block;font-size:14px;color:var(--mute);margin:12px 0 5px}
+input,select,textarea{width:100%;font:inherit;font-size:17px;min-height:50px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);-webkit-appearance:none;appearance:none}
+textarea{padding:12px 14px;min-height:80px;resize:vertical}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--mute) 50%),linear-gradient(135deg,var(--mute) 50%,transparent 50%);background-position:calc(100% - 22px) 22px,calc(100% - 16px) 22px;background-size:6px 6px;background-repeat:no-repeat}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:3px solid var(--amb);outline-offset:1px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.two label{margin-top:12px}
+button{font:inherit;font-weight:700;font-size:17px;min-height:54px;padding:0 18px;border-radius:14px;border:0;background:var(--panel);color:var(--ink);cursor:pointer;width:100%}
+button.amb{background:var(--amb);color:#000}button.red{background:var(--red);color:#fff}button.ghost{background:transparent;border:1px solid var(--line)}
+.row{display:flex;gap:10px;margin-top:14px}.row>*{flex:1}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;color:var(--mute)}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--mute);margin-right:7px;vertical-align:-1px}
+.dot.on{background:var(--ok);box-shadow:0 0 0 4px #2ecc7130}.dot.warn{background:var(--amb)}.dot.err{background:var(--red)}
+.board{background:#000;border:2px solid var(--line);border-radius:20px;padding:16px 14px 14px;text-align:center;margin-top:10px}
+#pk{font-weight:800;font-size:clamp(64px,22vw,130px);line-height:1;color:var(--amb);font-variant-numeric:tabular-nums;letter-spacing:-2px;white-space:nowrap;margin:4px 0}
+#pkInfo{font-size:15px;color:var(--mute)}
+.track{height:8px;border-radius:4px;background:var(--line);position:relative;margin:14px 6px 4px}
+.track i{position:absolute;top:-6px;width:20px;height:20px;border-radius:50%;background:var(--amb);border:3px solid #000;transform:translateX(-50%);left:0;transition:left .5s}
+.ends{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.stat{background:var(--panel);border-radius:12px;padding:8px;text-align:center}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums;white-space:nowrap}.stat span{font-size:12px;color:var(--mute)}
+#anoBtn{margin-top:14px;min-height:96px;font-size:26px;border-radius:20px;background:var(--red);color:#fff;box-shadow:0 6px 0 #a3241b;letter-spacing:.3px}
+#anoBtn:active{transform:translateY(4px);box-shadow:0 2px 0 #a3241b}
+.msg{display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:#ff4b3e22;color:#ffb8b1;font-size:15px}
+.list{margin-top:18px}
+.item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;align-items:center;background:var(--panel);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+.item .n{font-size:13px;color:var(--mute);grid-row:span 2}
+.item .p{font-weight:800;font-size:20px;color:var(--amb);font-variant-numeric:tabular-nums;white-space:nowrap}
+.item .t{font-size:14px;color:var(--mute);text-align:right;white-space:nowrap}
+.item .d{grid-column:2/4;font-size:16px}
+.item .d small{color:var(--mute)}
+.item button{grid-column:3;grid-row:1;width:auto;min-height:36px;padding:0 12px;font-size:14px;display:none}
+.empty{color:var(--mute);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:14px}
+/* fenêtre anomalie */
+.sheet{position:fixed;inset:0;background:#000b;display:none;align-items:flex-end;justify-content:center;z-index:9}
+.sheet.on{display:flex}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:22px 22px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-width:680px;max-height:92vh;overflow:auto}
+.cap{display:flex;justify-content:space-between;align-items:baseline;gap:10px;background:#000;border-radius:14px;padding:12px 14px}
+.cap b{font-size:40px;color:var(--amb);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cap span{color:var(--mute);font-size:15px;text-align:right}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.chips button{width:auto;min-height:44px;padding:0 14px;font-size:16px;font-weight:600;border:1px solid var(--line);background:var(--panel)}
+.chips button.sel{background:var(--amb);color:#000;border-color:var(--amb)}
+.sum{background:var(--panel);border-radius:14px;padding:14px;margin:10px 0}
+.sum div{display:flex;justify-content:space-between;gap:10px;padding:3px 0}.sum div span{color:var(--mute)}
+details{margin-top:24px;color:var(--mute);font-size:15px}summary{min-height:40px;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+
+<!-- 1. AVANT LA TOURNÉE -->
+<section class="screen" id="s1">
+  <h1>Nouvelle tournée</h1>
+  <p class="sub">Ligne Benguérir – Safi · KM 1 à KM 91</p>
+  <form id="f1">
+    <div class="two">
+      <div><label for="train">N° de train *</label><input id="train" inputmode="numeric" required autocomplete="off"></div>
+      <div><label for="wagon">N° wagon / cabine *</label><input id="wagon" required autocomplete="off"></div>
+    </div>
+    <div class="two">
+      <div><label for="hdep">Heure de départ *</label><input id="hdep" type="time" required></div>
+      <div><label for="date">Date</label><input id="date" type="date"></div>
+    </div>
+    <label for="agent">Agent</label><input id="agent" autocomplete="name">
+    <div class="two">
+      <div><label for="voie">Voie</label><select id="voie"><option value="">—</option><option>V1</option><option>V2</option><option>Voie unique</option></select></div>
+      <div><label for="sens">Sens</label><select id="sens"><option value="">—</option><option>Benguérir → Safi</option><option>Safi → Benguérir</option></select></div>
+    </div>
+    <label for="obs0">Remarque de départ</label><input id="obs0" autocomplete="off">
+    <div class="row"><button class="amb" type="submit">Démarrer la tournée</button></div>
+  </form>
+  <details><summary>Changer de parcours (fichier KML)</summary>
+    <p>Exportez la carte depuis Google My Maps en .KML, puis choisissez le fichier. Les points doivent s'appeler « KM 12.345 ».</p>
+    <input type="file" id="kml" accept=".kml,.xml,application/vnd.google-earth.kml+xml">
+    <p id="routeInfo"></p>
+  </details>
+</section>
+
+<!-- 2. PENDANT LA TOURNÉE -->
+<section class="screen" id="s2">
+  <div class="top"><span id="gps"><span class="dot"></span>GPS…</span><span id="tinfo"></span></div>
+  <div class="board">
+    <div id="pk">--+---</div>
+    <div id="pkInfo">En attente du GPS</div>
+    <div class="track"><i id="cur"></i></div>
+    <div class="ends"><span>KM 1</span><span>KM 91</span></div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="spd">—</b><span>km/h</span></div>
+    <div class="stat"><b id="acc">—</b><span>précision</span></div>
+    <div class="stat"><b id="cnt">0</b><span>anomalies</span></div>
+  </div>
+  <div class="msg" id="msg"></div>
+  <button id="anoBtn">⚠ ANOMALIE</button>
+  <div class="list" id="list"></div>
+  <div class="row"><button class="ghost" id="edit">Modifier la liste</button><button id="endBtn">Terminer la tournée</button></div>
+</section>
+
+<!-- 3. FIN -->
+<section class="screen" id="s3">
+  <h1>Tournée terminée</h1>
+  <p class="sub">Enregistrez le compte rendu dans Fichiers, ou envoyez-le.</p>
+  <div class="sum" id="sum"></div>
+  <button class="amb" id="docx">Compte rendu Word (.docx)</button>
+  <div class="row"><button id="txt">Texte (.txt)</button><button id="xml">XML (.xml)</button></div>
+  <div class="row"><button class="ghost" id="back">Revenir à la tournée</button><button class="ghost" id="newT">Nouvelle tournée</button></div>
+  <div class="msg" id="msg3"></div>
+</section>
+</main>
+
+<!-- fenêtre de saisie d'une anomalie -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="capPk">
+  <div class="card">
+    <div class="cap"><b id="capPk">--+---</b><span id="capT"></span></div>
+    <label for="type">Défaut</label>
+    <select id="type"><option value="">Choisir…</option></select>
+    <div class="chips" id="chips"></div>
+    <label for="det">Précision / nom du défaut</label>
+    <input id="det" autocomplete="off" enterkeyhint="done" placeholder="Écrire ici (facultatif si un défaut est choisi)">
+    <label for="pkEdit">PK (corrigeable)</label>
+    <input id="pkEdit" inputmode="decimal" autocomplete="off">
+    <div class="row"><button class="ghost" id="cancel">Annuler</button><button class="amb" id="save">Enregistrer</button></div>
+    <div class="row" id="delRow" style="display:none"><button class="red" id="del">Supprimer cette anomalie</button></div>
+  </div>
+</div>
+
+<script>
+{
+/* ---------- données ---------- */
+const DEFAUTS=['Nivellement','Défaut de rail','Dressage','Niv+Dr','PL','PLG','PLD','Gauche'];
+let ROUTE=[[1,32.241003,-7.96645544],[2,32.23876969,-7.97663038],[2.202,32.23811222,-7.97862287],[3,32.23552365,-7.98649167],[3.597,32.23175406,-7.99070906],[3.670,32.23113367,-7.99094385],[4,32.22851837,-7.99251981],[5,32.22412984,-8.00162174],[6,32.21826066,-8.00961787],[7,32.2160163,-8.0197054],[7.519,32.21533411,-8.02512093],[8,32.21362851,-8.02978654],[9,32.21027394,-8.03952345],[10,32.21214003,-8.04980165],[11,32.21166592,-8.06016916],[12,32.21224594,-8.07070324],[13,32.21589575,-8.08025656],[13.216,32.2168465,-8.08224349],[14,32.21853408,-8.09093309],[14.013,32.21855228,-8.09107129],[14.052,32.21861042,-8.09147876],[14.385,32.21970674,-8.09472758],[14.395,32.21975263,-8.0948182],[15,32.2216086,-8.10073384],[16,32.22253472,-8.11123915],[17,32.22346674,-8.12175085],[17.133,32.22359165,-8.12315581],[18,32.22504418,-8.13207029],[18.021,32.22513397,-8.13226488],[19,32.22912449,-8.14138532],[20,32.22817978,-8.15182883],[20.415,32.22862388,-8.15619574],[21,32.2292544,-8.16232298],[21.522,32.2298172,-8.16779819],[21.569,32.22986859,-8.16829615],[22,32.23032129,-8.17281374],[22.835,32.23018176,-8.18162403],[23,32.23005744,-8.1840236],[24,32.22994298,-8.19457887],[24.470,32.23030836,-8.19952292],[25,32.23072124,-8.20510374],[26,32.23183824,-8.21558421],[27,32.23334424,-8.2259992],[27.511,32.23411498,-8.2313293],[28,32.23487756,-8.23641119],[29,32.23703034,-8.24666562],[30,32.23982272,-8.25670847],[31,32.24259919,-8.26676441],[31.011,32.24262767,-8.26687832],[31.482,32.24371797,-8.27168498],[31.527,32.24381407,-8.27215516],[31.535,32.24382996,-8.27223226],[31.584,32.24393239,-8.27273584],[32,32.24480088,-8.27700812],[32.420,32.245682,-8.28132658],[32.463,32.24577403,-8.28177626],[32.467,32.24578247,-8.28181737],[32.524,32.24590113,-8.28239756],[33,32.24690063,-8.28728859],[34,32.24900009,-8.29756476],[35,32.25134799,-8.30853307],[35.300,32.25214106,-8.31157129],[36,32.25428181,-8.31851549],[36.166,32.25484922,-8.32014412],[37,32.25804255,-8.32810904],[38,32.26246646,-8.33731123],[38.154,32.26315844,-8.33872508],[39,32.26695109,-8.34646819],[40,32.27143379,-8.35562333],[40.611,32.27404217,-8.36131407],[40.622,32.27408214,-8.36142031],[41,32.27542895,-8.36508258],[41.932,32.27875147,-8.3741347],[41.990,32.27895819,-8.37469774],[42,32.27899178,-8.37478982],[42.260,32.27992215,-8.37731686],[43,32.28349889,-8.3838804],[44,32.2827484,-8.39407902],[44.046,32.28270033,-8.39456431],[45,32.28432598,-8.40505195],[46,32.28646788,-8.41531467],[47,32.28750911,-8.42560851],[48,32.28898634,-8.43585179],[49,32.28637451,-8.4459204],[50,32.28425312,-8.45615965],[51,32.27778347,-8.46347549],[52,32.27450515,-8.4731122],[53,32.27230841,-8.48336387],[53.465,32.27173959,-8.48820797],[54,32.27231795,-8.49382361],[54.671,32.27008233,-8.50023302],[54.739,32.26969749,-8.50079935],[55,32.26830309,-8.50300936],[56,32.26448172,-8.51257523],[57,32.25831295,-8.5201195],[58,32.25234938,-8.528066],[58.009,32.25231122,-8.52815887],[58.554,32.24969754,-8.53296046],[58.599,32.24940282,-8.53329019],[58.602,32.24938486,-8.53331028],[58.634,32.24915541,-8.53352782],[58.640,32.2491124,-8.53356646],[58.674,32.24887722,-8.53378417],[59,32.24640107,-8.53563185],[59.470,32.24280807,-8.53826345],[59.568,32.24207681,-8.53883504],[59.755,32.24077345,-8.54007385],[59.882,32.24005855,-8.54111354],[59.906,32.23993828,-8.54133004],[60,32.23953238,-8.54219548],[60.107,32.23917315,-8.54324879],[60.114,32.23915326,-8.54332197],[61,32.23788964,-8.55254962],[61.417,32.23704552,-8.55685326],[61.428,32.23702469,-8.55696186],[61.624,32.2368319,-8.55902178],[62,32.2376531,-8.5628342],[62.535,32.24068487,-8.5672013],[62.545,32.2407481,-8.56728431],[63,32.2434741,-8.57086353],[64,32.24947069,-8.57873943],[65,32.25546456,-8.58661357],[65.216,32.25675915,-8.58831369],[65.272,32.25709907,-8.58876077],[65.686,32.25957772,-8.59201714],[66,32.26145708,-8.59448759],[66.804,32.26680293,-8.60017155],[66.996,32.26828185,-8.60121995],[67,32.26830945,-8.60123782],[67.041,32.26863789,-8.60144613],[68,32.27661484,-8.60524334],[68.311,32.27922702,-8.60641856],[69,32.28559066,-8.60801031],[69.069,32.28621668,-8.60802806],[69.077,32.28628176,-8.60803315],[70,32.29437939,-8.61013587],[70.022,32.29457609,-8.61018936],[70.481,32.29815528,-8.61233459],[71,32.29921361,-8.61757095],[72,32.30454532,-8.62590254],[73,32.30926522,-8.63451433],[73.011,32.30925607,-8.63463864],[73.921,32.30700653,-8.64390027],[74,32.30681693,-8.64469895],[75,32.3045982,-8.65494836],[76,32.30238161,-8.66519514],[77,32.29732211,-8.67351383],[77.043,32.29701471,-8.67379588],[77.196,32.29593879,-8.67478878],[77.227,32.29571864,-8.67500191],[78,32.29114641,-8.68110831],[79,32.28711541,-8.69056017],[79.028,32.28700539,-8.69082954],[80,32.28322524,-8.70008703],[80.557,32.28136599,-8.70554843],[80.569,32.28133685,-8.70567067],[81,32.28055616,-8.71054165],[81.335,32.27996518,-8.71400936],[82,32.27668844,-8.71979873],[82.543,32.27340314,-8.72404212],[82.549,32.27337365,-8.72408885],[83,32.27126934,-8.72815515],[83.846,32.26832771,-8.73640304],[84,32.26780126,-8.73790393],[85,32.26437261,-8.74768721],[85.409,32.26364483,-8.75189754],[85.484,32.26363249,-8.75269672],[86,32.26354575,-8.75815929],[86.390,32.26321418,-8.76224868],[86.453,32.26310494,-8.76291101],[86.579,32.26283489,-8.7641975],[86.780,32.26211946,-8.76615397],[86.818,32.2619488,-8.7664991],[87,32.26099867,-8.76806121],[87.487,32.25802544,-8.77183796],[88,32.25577223,-8.77652462],[88.872,32.25444698,-8.7856004],[89,32.25409518,-8.78688939],[89.451,32.25197535,-8.7909328],[89.485,32.25177313,-8.79120618],[90,32.24888859,-8.79543497],[90.508,32.24758638,-8.80055879],[91,32.24677416,-8.80567041]]; // [PK km, lat, lon] — Benguérir–Safi, d'après votre carte My Maps
+const KEY='tourneePK_v1';
+const $=id=>document.getElementById(id);
+const R=6371008.8,D2R=Math.PI/180;
+let T=null;               // tournée en cours
+let fix=null;             // dernière position {lat,lon,acc,speed,ts,pk,d}
+let lastPk=null,dir=[],watchId=null,wake=null,editIdx=-1,editing=false,pending=null;
+
+try{const r=JSON.parse(localStorage.getItem('routePK')||'null');if(r&&r.length>1)ROUTE=r;}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(T))}catch(e){}};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const hm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
+const hms=d=>hm(d)+':'+pad(d.getSeconds());
+const fmtPk=km=>{if(km==null||!isFinite(km))return '--+---';let k=Math.floor(km),m=Math.round((km-k)*1000);if(m===1000){k++;m=0}return pad(k)+'+'+String(m).padStart(3,'0')};
+const parsePk=s=>{s=String(s).trim().replace(/\s/g,'');const m=s.match(/^(\d+)\+(\d{1,3})$/);if(m)return +m[1]+ +m[2].padEnd(3,'0')/1000;const v=+s.replace(',','.');return isFinite(v)&&s!==''?v:null};
+
+/* ---------- calcul du PK ---------- */
+function locate(lat,lon){
+  const kx=Math.cos(lat*D2R)*R*D2R,ky=R*D2R,n=ROUTE.length;let best=null,cands=[];
+  for(let i=0;i<n-1;i++){
+    const a=ROUTE[i],b=ROUTE[i+1];
+    const ax=(a[2]-lon)*kx,ay=(a[1]-lat)*ky,bx=(b[2]-lon)*kx,by=(b[1]-lat)*ky,dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;
+    let t=L?-(ax*dx+ay*dy)/L:0;
+    const lo=i===0?-3:0,hi=i===n-2?3:1; // prolonge un peu avant KM 1 et après KM 91
+    t=Math.max(lo,Math.min(hi,t));
+    const d=Math.hypot(ax+t*dx,ay+t*dy),pk=a[0]+t*(b[0]-a[0]);
+    cands.push({d,pk});if(!best||d<best.d)best={d,pk};
+  }
+  if(lastPk!=null){for(const c of cands)if(c.d<best.d+40&&Math.abs(c.pk-lastPk)<Math.abs(best.pk-lastPk)-0.05)best=c;}
+  return best;
+}
+
+/* ---------- écrans ---------- */
+function show(id){for(const s of document.querySelectorAll('.screen'))s.classList.toggle('on',s.id===id);window.scrollTo(0,0)}
+function msg(t,el='msg'){$(el).style.display=t?'block':'none';$(el).textContent=t||''}
+function gpsState(t,c){$('gps').innerHTML='<span class="dot '+c+'"></span>'+esc(t)}
+
+function initForm(){
+  const now=new Date();
+  $('hdep').value=hm(now);
+  $('date').value=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  try{const p=JSON.parse(localStorage.getItem('lastInfo')||'{}');for(const k of ['agent','voie','sens','wagon'])if(p[k])$(k).value=p[k];}catch(e){}
+  $('routeInfo').textContent='Parcours actuel : '+ROUTE.length+' points, KM '+ROUTE[0][0]+' à KM '+ROUTE[ROUTE.length-1][0]+'.';
+  show('s1');
+}
+$('f1').onsubmit=e=>{
+  e.preventDefault();
+  const info={};for(const k of ['train','wagon','hdep','date','agent','voie','sens','obs0'])info[k]=$(k).value.trim();
+  try{localStorage.setItem('lastInfo',JSON.stringify(info))}catch(er){}
+  T={info,start:Date.now(),end:null,ano:[],pkStart:null,pkEnd:null};
+  save();startTour();
+};
+function startTour(){
+  show('s2');render();
+  $('tinfo').textContent='Train '+T.info.train+' · '+T.info.wagon;
+  startGPS();keepAwake();
+}
+
+/* ---------- GPS ---------- */
+function startGPS(){
+  if(watchId!=null)return;
+  if(!('geolocation' in navigator)){gpsState('Pas de GPS','err');return}
+  gpsState('Recherche GPS…','warn');
+  watchId=navigator.geolocation.watchPosition(p=>{
+    const c=p.coords,r=locate(c.latitude,c.longitude);
+    let speed=c.speed!=null&&c.speed>=0?c.speed*3.6:null;
+    if(fix&&speed==null){const dt=(p.timestamp-fix.ts)/1000;if(dt>0)speed=Math.abs(r.pk-fix.pk)*3600/dt}
+    if(speed!=null&&speed>250)speed=null; // saut de position GPS : vitesse ignorée
+    if(lastPk!=null&&Math.abs(r.pk-lastPk)>0.003){dir.push(Math.sign(r.pk-lastPk));if(dir.length>6)dir.shift()}
+    lastPk=r.pk;
+    fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy,speed,ts:p.timestamp,pk:r.pk,d:r.d};
+    if(T&&!T.end){if(T.pkStart==null)T.pkStart=r.pk;T.pkEnd=r.pk;save()}
+    paint();
+  },err=>{
+    gpsState(err.code===1?'GPS refusé':'Signal GPS faible','err');
+    msg(err.code===1?'Autorisez la localisation : Réglages › Safari › Position › Autoriser, puis rechargez la page.':'');
+  },{enableHighAccuracy:true,maximumAge:0,timeout:15000});
+}
+function paint(){
+  if(!fix)return;
+  $('pk').textContent=fmtPk(fix.pk);
+  const s=dir.reduce((a,b)=>a+b,0);
+  $('pkInfo').textContent=(dir.length<3?'':s>0?'PK croissants · ':s<0?'PK décroissants · ':'')+(fix.d>60?'à '+Math.round(fix.d)+' m de la voie':'sur la voie');
+  $('spd').textContent=fix.speed!=null?Math.round(fix.speed):'—';
+  $('acc').textContent='±'+Math.round(fix.acc)+' m';
+  const a=ROUTE[0][0],b=ROUTE[ROUTE.length-1][0];
+  $('cur').style.left=Math.max(0,Math.min(100,(fix.pk-a)/(b-a)*100))+'%';
+  msg(fix.d>300?'Vous êtes loin de la ligne ('+Math.round(fix.d)+' m) : le PK affiché n\'est pas fiable.':'');
+}
+setInterval(()=>{
+  if(!fix||!$('s2').classList.contains('on'))return;
+  const age=(Date.now()-fix.ts)/1000;
+  if(age>10)gpsState('Signal perdu depuis '+Math.round(age)+' s','warn');
+  else gpsState('GPS actif','on');
+},1000);
+async function keepAwake(){try{wake=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&T&&!T.end)keepAwake()});
+
+/* ---------- anomalies ---------- */
+DEFAUTS.forEach(d=>{$('type').insertAdjacentHTML('beforeend','<option>'+esc(d)+'</option>')});
+$('type').insertAdjacentHTML('beforeend','<option>Autre</option>');
+$('chips').innerHTML=DEFAUTS.map(d=>'<button type="button" data-v="'+esc(d)+'">'+esc(d)+'</button>').join('');
+const syncChips=()=>{for(const b of $('chips').children)b.classList.toggle('sel',b.dataset.v===$('type').value)};
+$('chips').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('type').value=$('type').value===b.dataset.v?'':b.dataset.v;syncChips()};
+$('type').onchange=syncChips;
+
+$('anoBtn').onclick=()=>{
+  // on fige tout de suite le PK et l'heure du clic
+  const now=Date.now();
+  pending={ts:now,pk:fix?fix.pk:null,lat:fix?fix.lat:null,lon:fix?fix.lon:null,acc:fix?fix.acc:null,gpsAge:fix?Math.round((now-fix.ts)/1000):null,type:'',det:''};
+  if(navigator.vibrate)navigator.vibrate(60);
+  openSheet(pending,-1);
+};
+function openSheet(a,idx){
+  editIdx=idx;
+  $('capPk').textContent=fmtPk(a.pk);
+  $('capT').textContent=hms(new Date(a.ts))+(a.pk==null?' · sans GPS':a.gpsAge>10?' · GPS de '+a.gpsAge+' s':'');
+  $('type').value=a.type;$('det').value=a.det;$('pkEdit').value=a.pk==null?'':fmtPk(a.pk);
+  syncChips();$('delRow').style.display=idx>=0?'flex':'none';
+  $('sheet').classList.add('on');
+}
+$('cancel').onclick=()=>{$('sheet').classList.remove('on');pending=null};
+$('save').onclick=()=>{
+  const a=editIdx>=0?T.ano[editIdx]:pending;
+  a.type=$('type').value;a.det=$('det').value.trim();
+  if(!a.type&&!a.det){$('det').focus();$('det').placeholder='Choisissez un défaut ou écrivez-le';return}
+  const v=parsePk($('pkEdit').value);if(v!=null)a.pk=v;
+  if(editIdx<0)T.ano.push(a);
+  save();$('sheet').classList.remove('on');pending=null;render();
+};
+$('del').onclick=()=>{T.ano.splice(editIdx,1);save();$('sheet').classList.remove('on');render()};
+$('edit').onclick=()=>{editing=!editing;$('edit').textContent=editing?'Fin des modifications':'Modifier la liste';render()};
+$('list').onclick=e=>{const b=e.target.closest('button[data-i]');if(b)openSheet(T.ano[+b.dataset.i],+b.dataset.i)};
+const label=a=>[a.type,a.det].filter(Boolean).join(' — ');
+function render(){
+  $('cnt').textContent=T.ano.length;
+  $('list').innerHTML=T.ano.length?T.ano.map((a,i)=>'<div class="item"><span class="n">'+(i+1)+'</span><span class="p">'+fmtPk(a.pk)+'</span><span class="t">'+hm(new Date(a.ts))+'</span>'+(editing?'<button style="display:block" data-i="'+i+'">Modifier</button>':'')+'<span class="d">'+esc(a.type||'')+(a.det?' <small>'+esc(a.det)+'</small>':'')+'</span></div>').reverse().join(''):'<div class="empty">Aucune anomalie notée. Touchez le bouton rouge au moment du défaut.</div>';
+}
+
+/* ---------- fin de tournée ---------- */
+$('endBtn').onclick=()=>{
+  if(!$('endBtn').dataset.sure){$('endBtn').dataset.sure=1;$('endBtn').textContent='Toucher encore pour confirmer';setTimeout(()=>{delete $('endBtn').dataset.sure;$('endBtn').textContent='Terminer la tournée'},4000);return}
+  delete $('endBtn').dataset.sure;$('endBtn').textContent='Terminer la tournée';
+  T.end=Date.now();save();
+  if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null}
+  try{wake&&wake.release()}catch(e){}
+  endScreen();
+};
+function rows(){
+  const i=T.info,d=new Date(T.start),f=new Date(T.end||Date.now());
+  const dur=Math.round(((T.end||Date.now())-T.start)/60000);
+  return [['Ligne','Benguérir – Safi'],['Date',i.date?i.date.split('-').reverse().join('/'):d.toLocaleDateString('fr-FR')],['Agent',i.agent],['N° de train',i.train],['N° wagon / cabine',i.wagon],['Voie',i.voie],['Sens',i.sens],['Heure de départ',i.hdep],['Heure de fin',hm(f)],['Durée',Math.floor(dur/60)+' h '+pad(dur%60)],['PK début → fin',T.pkStart!=null?fmtPk(T.pkStart)+' → '+fmtPk(T.pkEnd):'—'],['Nombre d\'anomalies',String(T.ano.length)],['Remarque',i.obs0]].filter(r=>r[1]);
+}
+function counts(){const c={};for(const a of T.ano){const k=a.type||'Autre';c[k]=(c[k]||0)+1}return Object.entries(c)}
+function sorted(){return T.ano.map((a,i)=>({...a,n:i+1}))}
+function endScreen(){
+  $('sum').innerHTML=rows().map(r=>'<div><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>').join('');
+  show('s3');
+}
+$('back').onclick=()=>{T.end=null;save();startTour()};
+$('newT').onclick=()=>{
+  if(!$('newT').dataset.sure){$('newT').dataset.sure=1;$('newT').textContent='Confirmer (efface la tournée)';setTimeout(()=>{delete $('newT').dataset.sure;$('newT').textContent='Nouvelle tournée'},4000);return}
+  T=null;try{localStorage.removeItem(KEY)}catch(e){}fix=null;lastPk=null;dir=[];
+  delete $('newT').dataset.sure;$('newT').textContent='Nouvelle tournée';initForm();
+};
+const fname=ext=>{const i=T.info;return ('CR_tournee_'+(i.date||'')+'_train'+i.train).replace(/[^\w\-]+/g,'_')+'.'+ext};
+
+/* --- texte --- */
+function toTxt(){
+  const L=['COMPTE RENDU DE TOURNÉE','========================',''];
+  for(const r of rows())L.push((r[0]+' ').padEnd(22,'.')+' '+r[1]);
+  L.push('','ANOMALIES','---------');
+  if(!T.ano.length)L.push('Aucune anomalie relevée.');
+  for(const a of sorted())L.push(String(a.n).padStart(3)+'. PK '+fmtPk(a.pk)+'  '+hms(new Date(a.ts))+'  '+label(a)+(a.lat!=null?'  ('+a.lat.toFixed(6)+', '+a.lon.toFixed(6)+')':''));
+  if(T.ano.length){L.push('','RÉCAPITULATIF');for(const[k,v]of counts())L.push('  '+k+' : '+v)}
+  L.push('','Signature :','');
+  return L.join('\r\n');
+}
+/* --- xml --- */
+function toXml(){
+  const x=s=>esc(s);
+  let o='<?xml version="1.0" encoding="UTF-8"?>\n<compteRendu>\n  <tournee>\n';
+  for(const r of rows())o+='    <info nom="'+x(r[0])+'">'+x(r[1])+'</info>\n';
+  o+='  </tournee>\n  <anomalies>\n';
+  for(const a of sorted())o+='    <anomalie n="'+a.n+'" pk="'+fmtPk(a.pk)+'" heure="'+hms(new Date(a.ts))+'"'+(a.lat!=null?' lat="'+a.lat.toFixed(6)+'" lon="'+a.lon.toFixed(6)+'"':'')+'>\n      <defaut>'+x(a.type)+'</defaut>\n      <precision>'+x(a.det)+'</precision>\n    </anomalie>\n';
+  return o+'  </anomalies>\n</compteRendu>\n';
+}
+/* --- word (.docx) écrit à la main, sans connexion --- */
+function toDocx(){
+  const x=s=>esc(s);
+  const run=(t,o={})=>'<w:r><w:rPr>'+(o.b?'<w:b/>':'')+(o.c?'<w:color w:val="'+o.c+'"/>':'')+'<w:sz w:val="'+(o.s||22)+'"/></w:rPr><w:t xml:space="preserve">'+x(t)+'</w:t></w:r>';
+  const p=(t,o={})=>'<w:p><w:pPr><w:spacing w:after="'+(o.after??80)+'"/>'+(o.center?'<w:jc w:val="center"/>':'')+'</w:pPr>'+run(t,o)+'</w:p>';
+  const cell=(t,w,o={})=>'<w:tc><w:tcPr><w:tcW w:w="'+w+'" w:type="dxa"/>'+(o.fill?'<w:shd w:val="clear" w:color="auto" w:fill="'+o.fill+'"/>':'')+'</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr>'+run(t,o)+'</w:p></w:tc>';
+  const tbl=(cols,rws,head)=>'<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(b=>'<w:'+b+' w:val="single" w:sz="4" w:color="999999"/>').join('')+'</w:tblBorders><w:tblCellMar><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+cols.map(w=>'<w:gridCol w:w="'+w+'"/>').join('')+'</w:tblGrid>'+(head?'<w:tr>'+head.map((h,i)=>cell(h,cols[i],{b:1,fill:'E8E8E8',s:20})).join('')+'</w:tr>':'')+rws.map(r=>'<w:tr>'+r.map((c,i)=>cell(c,cols[i],{s:20,b:!head&&i===0})).join('')+'</w:tr>').join('')+'</w:tbl>';
+  let b=p('COMPTE RENDU DE TOURNÉE',{b:1,s:32,center:1,after:60})+p('Ligne Benguérir – Safi',{s:22,center:1,c:'555555',after:240});
+  b+=tbl([3200,6200],rows().filter(r=>r[0]!=='Ligne'));
+  b+=p('',{after:120})+p('Anomalies relevées',{b:1,s:26,after:100});
+  b+=T.ano.length?tbl([500,1200,1100,4400,2200],sorted().map(a=>[String(a.n),fmtPk(a.pk),hms(new Date(a.ts)),label(a),a.lat!=null?a.lat.toFixed(5)+', '+a.lon.toFixed(5):'—']),['N°','PK','Heure','Défaut','GPS']):p('Aucune anomalie relevée.');
+  if(T.ano.length){b+=p('',{after:120})+p('Récapitulatif',{b:1,s:26,after:100})+tbl([6000,3400],counts().map(([k,v])=>[k,String(v)]),['Défaut','Nombre'])}
+  b+=p('',{after:360})+p('Signature de l\'agent :',{b:1});
+  const doc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+b+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>';
+  const files={
+    '[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    '_rels/.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    'word/document.xml':doc
+  };
+  return zip(files);
+}
+// zip sans compression (suffisant pour Word)
+const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=u=>{let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRC[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0};
+function zip(files){
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+  for(const[name,txt]of Object.entries(files)){
+    const nb=enc.encode(name),data=enc.encode(txt),crc=crc32(data);
+    const h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint32(14,crc,true);h.setUint32(18,data.length,true);h.setUint32(22,data.length,true);h.setUint16(26,nb.length,true);
+    parts.push(new Uint8Array(h.buffer),nb,data);
+    const c=new DataView(new ArrayBuffer(46));
+    c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint32(16,crc,true);c.setUint32(20,data.length,true);c.setUint32(24,data.length,true);c.setUint16(28,nb.length,true);c.setUint32(42,off,true);
+    cen.push(new Uint8Array(c.buffer),nb);
+    off+=30+nb.length+data.length;
+  }
+  const size=cen.reduce((s,u)=>s+u.length,0),e=new DataView(new ArrayBuffer(22)),n=Object.keys(files).length;
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,n,true);e.setUint16(10,n,true);e.setUint32(12,size,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,new Uint8Array(e.buffer)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+async function deliver(blob,name){
+  msg('','msg3');
+  const file=new File([blob],name,{type:blob.type});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return}
+  }catch(e){if(e.name==='AbortError')return}
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  msg('Fichier « '+name+' » téléchargé : retrouvez-le dans Fichiers › Téléchargements.','msg3');
+}
+$('docx').onclick=()=>deliver(toDocx(),fname('docx'));
+$('txt').onclick=()=>deliver(new Blob(['﻿'+toTxt()],{type:'text/plain;charset=utf-8'}),fname('txt'));
+$('xml').onclick=()=>deliver(new Blob([toXml()],{type:'application/xml'}),fname('xml'));
+
+/* ---------- changer de parcours ---------- */
+$('kml').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  f.text().then(txt=>{
+    const doc=new DOMParser().parseFromString(txt,'application/xml'),pts=[];
+    for(const m of doc.getElementsByTagName('Placemark')){
+      const nm=(m.getElementsByTagName('name')[0]||{}).textContent||'',c=m.getElementsByTagName('coordinates')[0];
+      const k=nm.match(/(\d+(?:[.,]\d+)?)(?:\s*\+\s*(\d{1,3}))?/);if(!c||!k)continue;
+      const v=c.textContent.trim().split(',');
+      const pk=k[2]?+k[1]+ +k[2].padEnd(3,'0')/1000:+k[1].replace(',','.');
+      pts.push([pk,+v[1],+v[0]]);
+    }
+    pts.sort((a,b)=>a[0]-b[0]);
+    if(pts.length<2){$('routeInfo').textContent='Aucun point « KM … » trouvé dans ce fichier.';return}
+    ROUTE=pts;try{localStorage.setItem('routePK',JSON.stringify(pts))}catch(er){}
+    $('routeInfo').textContent='Nouveau parcours chargé : '+pts.length+' points, KM '+pts[0][0]+' à KM '+pts[pts.length-1][0]+'.';
+  });
+};
+
+/* ---------- démarrage : on reprend une tournée en cours ---------- */
+try{T=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){T=null}
+if(T&&T.end)endScreen();else if(T)startTour();else initForm();
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
